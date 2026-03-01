@@ -23,7 +23,7 @@ tags:
   - name: Auth
     description: Register, login, refresh, logout, password, 2FA
   - name: Organizations
-    description: Organizations (Super Admin CRUD; by-code public)
+    description: Organizations (Super Admin CRUD, by-code public)
   - name: Dashboard
     description: Role-based dashboard stats
   - name: Exams
@@ -46,14 +46,14 @@ components:
       type: apiKey
       in: header
       name: x-organization-id
-      description: Required for admin/student; optional for super_admin (tenant context)
+      description: Required for admin/student, optional for super_admin (tenant context)
   security:
     - bearerAuth: []
   schemas:
     Error:
       type: object
       properties:
-        success: { type: boolean; example: false }
+        success: { type: boolean, example: false }
         message: { type: string }
     UserRef:
       type: object
@@ -61,12 +61,12 @@ components:
         id: { type: string }
         email: { type: string }
         name: { type: string }
-        role: { type: string; enum: [student, admin, super_admin] }
+        role: { type: string, enum: [student, admin, super_admin] }
         organizationId: { type: string }
     AuthSuccess:
       type: object
       properties:
-        success: { type: boolean; example: true }
+        success: { type: boolean, example: true }
         user: { $ref: '#/components/schemas/UserRef' }
         accessToken: { type: string }
         refreshToken: { type: string }
@@ -85,8 +85,8 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string; example: ok }
-                  timestamp: { type: string; format: date-time }
+                  status: { type: string, example: ok }
+                  timestamp: { type: string, format: date-time }
 
   /health/ready:
     get:
@@ -100,7 +100,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string; example: ok }
+                  status: { type: string, example: ok }
         '503':
           description: Degraded
           content:
@@ -108,7 +108,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string; example: degraded }
+                  status: { type: string, example: degraded }
                   checks: { type: object }
 
   /auth/register:
@@ -123,11 +123,11 @@ paths:
               type: object
               required: [email, password, name, role, organizationId]
               properties:
-                email: { type: string; format: email }
-                password: { type: string; minLength: 8 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
                 name: { type: string }
-                role: { type: string; enum: [student, admin] }
-                organizationId: { type: string; description: 'Organization code (e.g. platform) or ID' }
+                role: { type: string, enum: [student, admin] }
+                organizationId: { type: string, description: 'Organization code (e.g. platform) or ID' }
       responses:
         '201':
           description: Created
@@ -149,7 +149,7 @@ paths:
               type: object
               required: [email, password, organizationId]
               properties:
-                email: { type: string; format: email }
+                email: { type: string, format: email }
                 password: { type: string }
                 organizationId: { type: string }
       responses:
@@ -163,7 +163,7 @@ paths:
                   - type: object
                     properties:
                       success: { type: boolean }
-                      requires2FA: { type: boolean; example: true }
+                      requires2FA: { type: boolean, example: true }
                       tempToken: { type: string }
                       message: { type: string }
         '401': { description: Invalid credentials or org code }
@@ -204,7 +204,7 @@ paths:
               type: object
               required: [email, organizationId]
               properties:
-                email: { type: string; format: email }
+                email: { type: string, format: email }
                 organizationId: { type: string }
       responses:
         '200':
@@ -222,7 +222,7 @@ paths:
               required: [token, newPassword]
               properties:
                 token: { type: string }
-                newPassword: { type: string; minLength: 8 }
+                newPassword: { type: string, minLength: 8 }
       responses:
         '200': { description: Password updated }
         '400': { description: Invalid or expired token }
@@ -240,7 +240,7 @@ paths:
               required: [currentPassword, newPassword]
               properties:
                 currentPassword: { type: string }
-                newPassword: { type: string; minLength: 8 }
+                newPassword: { type: string, minLength: 8 }
       responses:
         '200': { description: Password updated }
         '400': { description: Current password incorrect }
@@ -276,8 +276,8 @@ paths:
                       name: { type: string }
                       role: { type: string }
                       organizationId: { type: string }
-                      organizationCode: { type: string; nullable: true }
-                      organizationName: { type: string; nullable: true }
+                      organizationCode: { type: string, nullable: true }
+                      organizationName: { type: string, nullable: true }
                       twoFactorEnabled: { type: boolean }
         '401': { description: Unauthorized }
 
@@ -311,7 +311,7 @@ paths:
               type: object
               required: [code]
               properties:
-                code: { type: string; length: 6 }
+                code: { type: string, length: 6 }
       responses:
         '200': { description: 2FA enabled }
         '400': { description: Invalid code }
@@ -328,7 +328,7 @@ paths:
               required: [tempToken, code]
               properties:
                 tempToken: { type: string }
-                code: { type: string; length: 6 }
+                code: { type: string, length: 6 }
       responses:
         '200':
           description: Logged in
@@ -349,7 +349,7 @@ paths:
               type: object
               required: [code]
               properties:
-                code: { type: string; length: 6 }
+                code: { type: string, length: 6 }
       responses:
         '200': { description: 2FA disabled }
         '400': { description: Invalid code }
@@ -383,7 +383,7 @@ paths:
   /organizations:
     get:
       tags: [Organizations]
-      summary: List organizations (Super Admin all; others own org)
+      summary: List organizations (Super Admin all, others own org)
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -394,8 +394,8 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean }
-                  organizations: { type: array; items: { type: object } }
-                  message: { type: string; nullable: true }
+                  organizations: { type: array, items: { type: object } }
+                  message: { type: string, nullable: true }
     post:
       tags: [Organizations]
       summary: Create organization (Super Admin only)
@@ -408,10 +408,10 @@ paths:
               required: [name, slug]
               properties:
                 name: { type: string }
-                slug: { type: string; pattern: '^[a-z0-9_-]+$' }
-                status: { type: string; enum: [active, suspended, trial] }
+                slug: { type: string, pattern: '^[a-z0-9_-]+$' }
+                status: { type: string, enum: [active, suspended, trial] }
       responses:
-        '201': { description: Created; returns organization }
+        '201': { description: Created, returns organization }
         '409': { description: Slug already in use }
 
   /organizations/{id}:
@@ -469,7 +469,7 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Stats (examsCount, questionsCount, studentsCount, recentAttempts, attemptSummary for admin; totalAttempts, publishedExamsAvailable, recentAttempts for student)
+          description: Stats (examsCount, questionsCount, studentsCount, recentAttempts, attemptSummary for admin, totalAttempts, publishedExamsAvailable, recentAttempts for student)
           content:
             application/json:
               schema:
@@ -482,7 +482,7 @@ paths:
   /exams:
     get:
       tags: [Exams]
-      summary: List exams (admin all; student published only; students get userAttemptStatus per exam)
+      summary: List exams (admin all, student published only, students get userAttemptStatus per exam)
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -493,7 +493,7 @@ paths:
                 type: object
                 properties:
                   success: { type: boolean }
-                  exams: { type: array; items: { type: object } }
+                  exams: { type: array, items: { type: object } }
     post:
       tags: [Exams]
       summary: Create exam (Admin/Super Admin)
@@ -507,10 +507,10 @@ paths:
               properties:
                 title: { type: string }
                 description: { type: string }
-                status: { type: string; enum: [draft, published, archived] }
-                durationMinutes: { type: number; minimum: 1 }
-                passMark: { type: number; minimum: 0; maximum: 100 }
-                questionIds: { type: array; items: { type: string } }
+                status: { type: string, enum: [draft, published, archived] }
+                durationMinutes: { type: number, minimum: 1 }
+                passMark: { type: number, minimum: 0, maximum: 100 }
+                questionIds: { type: array, items: { type: string } }
                 shuffleQuestions: { type: boolean }
       responses:
         '201': { description: Created }
@@ -550,7 +550,7 @@ paths:
                 status: { type: string }
                 durationMinutes: { type: number }
                 passMark: { type: number }
-                questionIds: { type: array; items: { type: string } }
+                questionIds: { type: array, items: { type: string } }
       responses:
         '200': { description: Updated }
         '404': { description: Not found }
@@ -615,11 +615,11 @@ paths:
               type: object
               required: [type, body]
               properties:
-                type: { type: string; enum: [mcq_single, mcq_multiple, true_false, short_answer] }
+                type: { type: string, enum: [mcq_single, mcq_multiple, true_false, short_answer] }
                 body: { type: string }
-                options: { type: array; items: { type: object; properties: { text: { type: string }; isCorrect: { type: boolean } } } }
+                options: { type: array, items: { type: object, properties: { text: { type: string }, isCorrect: { type: boolean } } } }
                 correctAnswer: { type: string }
-                points: { type: number; minimum: 0 }
+                points: { type: number, minimum: 0 }
       responses:
         '201': { description: Created }
 
@@ -684,14 +684,14 @@ paths:
               type: object
               required: [questions]
               properties:
-                questions: { type: array; items: { type: object } }
+                questions: { type: array, items: { type: object } }
       responses:
-        '201': { description: Created; returns created count and errors if any }
+        '201': { description: Created, returns created count and errors if any }
 
   /attempts/start:
     post:
       tags: [Attempts]
-      summary: Start an exam (creates in_progress attempt; 403 if already submitted)
+      summary: Start an exam (creates in_progress attempt, 403 if already submitted)
       security: [{ bearerAuth: [] }]
       requestBody:
         content:
@@ -711,7 +711,7 @@ paths:
                 properties:
                   success: { type: boolean }
                   attempt: { type: object }
-                  exam: { type: object; properties: { durationMinutes: { type: number }; title: { type: string } } }
+                  exam: { type: object, properties: { durationMinutes: { type: number }, title: { type: string } } }
         '201': { description: New attempt created }
         '403': { description: Exam not published or already completed (no retakes) }
         '404': { description: Exam not found }
@@ -719,7 +719,7 @@ paths:
   /attempts:
     get:
       tags: [Attempts]
-      summary: List attempts (student own; admin filtered by examId or userId)
+      summary: List attempts (student own, admin filtered by examId or userId)
       security: [{ bearerAuth: [] }]
       parameters:
         - name: examId
@@ -728,13 +728,13 @@ paths:
         - name: userId
           in: query
           schema: { type: string }
-          description: Admin only; filter by user
+          description: Admin only, filter by user
         - name: status
           in: query
-          schema: { type: string; enum: [in_progress, submitted] }
+          schema: { type: string, enum: [in_progress, submitted] }
       responses:
         '200':
-          description: List of attempts (with examTitle; admin gets user info)
+          description: List of attempts (with examTitle, admin gets user info)
           content:
             application/json:
               schema:
@@ -755,7 +755,7 @@ paths:
           schema: { type: string }
         - name: format
           in: query
-          schema: { type: string; enum: [csv, excel, xlsx]; default: csv }
+          schema: { type: string, enum: [csv, excel, xlsx], default: csv }
       responses:
         '200':
           description: File download (text/csv or xlsx)
@@ -777,7 +777,7 @@ paths:
         '404': { description: Not found }
     patch:
       tags: [Attempts]
-      summary: Update attempt (PATCH for auto-save answers; use POST submit to submit)
+      summary: Update attempt (PATCH for auto-save answers, use POST submit to submit)
       security: [{ bearerAuth: [] }]
       parameters:
         - name: id
@@ -791,7 +791,7 @@ paths:
               type: object
               required: [answers]
               properties:
-                answers: { type: array; items: { type: object; properties: { questionId: { type: string }; value: {} } } }
+                answers: { type: array, items: { type: object, properties: { questionId: { type: string }, value: {} } } }
       responses:
         '200': { description: Updated (in_progress only) }
         '404': { description: Not found or already submitted }
@@ -813,11 +813,11 @@ paths:
               type: object
               required: [answers]
               properties:
-                answers: { type: array; items: { type: object; properties: { questionId: { type: string }; value: {} } } }
-                securityEvents: { type: array; items: { type: object; properties: { type: { type: string }; at: { type: string } } } }
+                answers: { type: array, items: { type: object, properties: { questionId: { type: string }, value: {} } } }
+                securityEvents: { type: array, items: { type: object, properties: { type: { type: string }, at: { type: string } } } }
       responses:
         '200':
-          description: Submitted; returns attempt and result (score, maxScore, percentage, passed)
+          description: Submitted, returns attempt and result (score, maxScore, percentage, passed)
           content:
             application/json:
               schema:
@@ -825,7 +825,7 @@ paths:
                 properties:
                   success: { type: boolean }
                   attempt: { type: object }
-                  result: { type: object; properties: { score: { type: number }; maxScore: { type: number }; percentage: { type: number }; passed: { type: boolean } } }
+                  result: { type: object, properties: { score: { type: number }, maxScore: { type: number }, percentage: { type: number }, passed: { type: boolean } } }
         '404': { description: Not found or already submitted }
 
   /attempts/{id}/grades:
@@ -859,12 +859,12 @@ paths:
   /users:
     get:
       tags: [Users]
-      summary: List users (Admin/Super Admin; optional role filter)
+      summary: List users (Admin/Super Admin, optional role filter)
       security: [{ bearerAuth: [] }]
       parameters:
         - name: role
           in: query
-          schema: { type: string; enum: [student, admin, super_admin] }
+          schema: { type: string, enum: [student, admin, super_admin] }
       responses:
         '200':
           description: List of users (email, name, role, createdAt)
@@ -893,12 +893,12 @@ paths:
                     type: object
                     required: [email, name]
                     properties:
-                      email: { type: string; format: email }
+                      email: { type: string, format: email }
                       name: { type: string }
-                      password: { type: string; minLength: 8 }
+                      password: { type: string, minLength: 8 }
       responses:
         '201':
-          description: created, skipped, failed counts; skippedDetails, errors arrays if any
+          description: created, skipped, failed counts, skippedDetails, errors arrays if any
           content:
             application/json:
               schema:
