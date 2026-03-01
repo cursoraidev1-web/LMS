@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "build:render": "npm install --include=dev && npm run build",
     "start": "node dist/server.js",
     "seed": "tsx scripts/seed.ts",
     "lint": "eslint src --ext .ts",

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import healthRoutes from './health';
 import authRoutes from './auth';
 import organizationRoutes from './organizations';
@@ -20,7 +20,7 @@ router.use('/attempts', attemptRoutes);
 router.use('/users', userRoutes);
 
 // API v1 – list all endpoints (proposal-aligned)
-router.get('/', (_req, res) => {
+router.get('/', (_req: Request, res: Response) => {
   res.json({
     success: true,
     name: 'LMS CBT API',

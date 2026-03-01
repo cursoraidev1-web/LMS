@@ -26,5 +26,5 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const config = parsed.data;
 export type Config = z.infer<typeof envSchema>;
+export const config: Config = parsed.data as Config;
