@@ -39,7 +39,5 @@ const questionSchema = new Schema<IQuestion>(
   { timestamps: true }
 );
 
-questionSchema.index({ organizationId: 1 });
-
 export const Question: Model<IQuestion> =
   mongoose.models?.Question ?? mongoose.model<IQuestion>('Question', questionSchema);

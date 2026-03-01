@@ -28,6 +28,17 @@ app.use(requestLogger);
 
 app.use(rateLimitMiddleware);
 
+// Root: avoid 404 for GET / (health checks, bookmarks)
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    name: 'LMS CBT API',
+    version: '1.0',
+    docs: '/api-docs',
+    health: '/health',
+    api: config.API_PREFIX,
+  });
+});
+
 app.get('/health', (_req: Request, res: Response) => res.status(200).json({ status: 'ok' }));
 
 // OpenAPI spec (for Swagger UI and frontend). Inject PUBLIC_API_URL as server when set.
