@@ -1,0 +1,912 @@
+openapi: 3.0.3
+info:
+  title: LMS CBT API
+  description: |
+    Production-ready Computer-Based Testing API. Multi-tenant, JWT auth, role-based access (student, admin, super_admin).
+    **Authentication:** Send `Authorization: Bearer <accessToken>` and `x-organization-id: <orgId>` (required for non–super_admin) on protected routes.
+    **Base URL:** All paths below are relative to `/api/v1` (e.g. full URL for login is `POST /api/v1/auth/login`).
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local (dev)
+  - url: /api/v1
+    description: Current host (same origin as this doc)
+  - url: https://your-api-domain.com/api/v1
+    description: Live / Production (set PUBLIC_API_URL in env or replace in spec)
+
+tags:
+  - name: Health
+    description: Liveness and readiness
+  - name: Auth
+    description: Register, login, refresh, logout, password, 2FA
+  - name: Organizations
+    description: Organizations (Super Admin CRUD; by-code public)
+  - name: Dashboard
+    description: Role-based dashboard stats
+  - name: Exams
+    description: Exam CRUD and stats
+  - name: Questions
+    description: Question bank and bulk
+  - name: Attempts
+    description: Start, submit, list, grade, export
+  - name: Users
+    description: List and bulk create students
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from login/register
+    organizationId:
+      type: apiKey
+      in: header
+      name: x-organization-id
+      description: Required for admin/student; optional for super_admin (tenant context)
+  security:
+    - bearerAuth: []
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean; example: false }
+        message: { type: string }
+    UserRef:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string; enum: [student, admin, super_admin] }
+        organizationId: { type: string }
+    AuthSuccess:
+      type: object
+      properties:
+        success: { type: boolean; example: true }
+        user: { $ref: '#/components/schemas/UserRef' }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: string }
+
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness
+      responses:
+        '200':
+          description: Process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string; example: ok }
+                  timestamp: { type: string; format: date-time }
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness (DB + Redis)
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string; example: ok }
+        '503':
+          description: Degraded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string; example: degraded }
+                  checks: { type: object }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role, organizationId]
+              properties:
+                email: { type: string; format: email }
+                password: { type: string; minLength: 8 }
+                name: { type: string }
+                role: { type: string; enum: [student, admin] }
+                organizationId: { type: string; description: 'Organization code (e.g. platform) or ID' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSuccess' }
+        '400': { description: Invalid body or org code }
+        '409': { description: Email already registered in org }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, organizationId]
+              properties:
+                email: { type: string; format: email }
+                password: { type: string }
+                organizationId: { type: string }
+      responses:
+        '200':
+          description: Success or 2FA required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthSuccess'
+                  - type: object
+                    properties:
+                      success: { type: boolean }
+                      requires2FA: { type: boolean; example: true }
+                      tempToken: { type: string }
+                      message: { type: string }
+        '401': { description: Invalid credentials or org code }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  accessToken: { type: string }
+                  expiresIn: { type: string }
+        '401': { description: Invalid or expired refresh token }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Forgot password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, organizationId]
+              properties:
+                email: { type: string; format: email }
+                organizationId: { type: string }
+      responses:
+        '200':
+          description: Email sent or generic message
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string; minLength: 8 }
+      responses:
+        '200': { description: Password updated }
+        '400': { description: Invalid or expired token }
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password (authenticated)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string; minLength: 8 }
+      responses:
+        '200': { description: Password updated }
+        '400': { description: Current password incorrect }
+        '401': { description: Unauthorized }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Logged out }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: User with org name/code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      name: { type: string }
+                      role: { type: string }
+                      organizationId: { type: string }
+                      organizationCode: { type: string; nullable: true }
+                      organizationName: { type: string; nullable: true }
+                      twoFactorEnabled: { type: boolean }
+        '401': { description: Unauthorized }
+
+  /auth/2fa/setup:
+    post:
+      tags: [Auth]
+      summary: Start 2FA setup (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: QR and secret
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  secret: { type: string }
+                  qrDataUrl: { type: string }
+        '401': { description: Unauthorized }
+
+  /auth/2fa/verify-setup:
+    post:
+      tags: [Auth]
+      summary: Verify 2FA and enable
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string; length: 6 }
+      responses:
+        '200': { description: 2FA enabled }
+        '400': { description: Invalid code }
+
+  /auth/2fa/verify-login:
+    post:
+      tags: [Auth]
+      summary: Complete login with 2FA code
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tempToken, code]
+              properties:
+                tempToken: { type: string }
+                code: { type: string; length: 6 }
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSuccess' }
+        '401': { description: Invalid or expired }
+
+  /auth/2fa/disable:
+    post:
+      tags: [Auth]
+      summary: Disable 2FA
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string; length: 6 }
+      responses:
+        '200': { description: 2FA disabled }
+        '400': { description: Invalid code }
+
+  /organizations/by-code/{code}:
+    get:
+      tags: [Organizations]
+      summary: Get organization by code (public, for login/register)
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Organization id, name, code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  organization:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      code: { type: string }
+        '404': { description: Not found }
+
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations (Super Admin all; others own org)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  organizations: { type: array; items: { type: object } }
+                  message: { type: string; nullable: true }
+    post:
+      tags: [Organizations]
+      summary: Create organization (Super Admin only)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name: { type: string }
+                slug: { type: string; pattern: '^[a-z0-9_-]+$' }
+                status: { type: string; enum: [active, suspended, trial] }
+      responses:
+        '201': { description: Created; returns organization }
+        '409': { description: Slug already in use }
+
+  /organizations/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get one organization
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Organization }
+        '403': { description: Access denied }
+        '404': { description: Not found }
+    patch:
+      tags: [Organizations]
+      summary: Update organization (Super Admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                slug: { type: string }
+                status: { type: string }
+      responses:
+        '200': { description: Updated }
+        '404': { description: Not found }
+    delete:
+      tags: [Organizations]
+      summary: Delete organization (Super Admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+        '404': { description: Not found }
+
+  /dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Role-based dashboard stats
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Stats (examsCount, questionsCount, studentsCount, recentAttempts, attemptSummary for admin; totalAttempts, publishedExamsAvailable, recentAttempts for student)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  stats: { type: object }
+        '400': { description: Organization context required }
+
+  /exams:
+    get:
+      tags: [Exams]
+      summary: List exams (admin all; student published only; students get userAttemptStatus per exam)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of exams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  exams: { type: array; items: { type: object } }
+    post:
+      tags: [Exams]
+      summary: Create exam (Admin/Super Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, durationMinutes]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                status: { type: string; enum: [draft, published, archived] }
+                durationMinutes: { type: number; minimum: 1 }
+                passMark: { type: number; minimum: 0; maximum: 100 }
+                questionIds: { type: array; items: { type: string } }
+                shuffleQuestions: { type: boolean }
+      responses:
+        '201': { description: Created }
+        '400': { description: Validation error }
+
+  /exams/{id}:
+    get:
+      tags: [Exams]
+      summary: Get exam by ID (with questions)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Exam with questions array }
+        '403': { description: Not available for student }
+        '404': { description: Not found }
+    patch:
+      tags: [Exams]
+      summary: Update exam
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                status: { type: string }
+                durationMinutes: { type: number }
+                passMark: { type: number }
+                questionIds: { type: array; items: { type: string } }
+      responses:
+        '200': { description: Updated }
+        '404': { description: Not found }
+    delete:
+      tags: [Exams]
+      summary: Delete exam
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+        '404': { description: Not found }
+
+  /exams/{id}/stats:
+    get:
+      tags: [Exams]
+      summary: Exam statistics (Admin/Super Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: totalAttempts, passed, passRate, averageScorePercent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  stats: { type: object }
+        '404': { description: Not found }
+
+  /questions:
+    get:
+      tags: [Questions]
+      summary: List questions (question bank)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  questions: { type: array }
+    post:
+      tags: [Questions]
+      summary: Create question (Admin/Super Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, body]
+              properties:
+                type: { type: string; enum: [mcq_single, mcq_multiple, true_false, short_answer] }
+                body: { type: string }
+                options: { type: array; items: { type: object; properties: { text: { type: string }; isCorrect: { type: boolean } } } }
+                correctAnswer: { type: string }
+                points: { type: number; minimum: 0 }
+      responses:
+        '201': { description: Created }
+
+  /questions/{id}:
+    get:
+      tags: [Questions]
+      summary: Get one question
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Question }
+        '404': { description: Not found }
+    patch:
+      tags: [Questions]
+      summary: Update question
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string }
+                body: { type: string }
+                options: { type: array }
+                correctAnswer: { type: string }
+                points: { type: number }
+      responses:
+        '200': { description: Updated }
+        '404': { description: Not found }
+    delete:
+      tags: [Questions]
+      summary: Delete question
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Deleted }
+        '404': { description: Not found }
+
+  /questions/bulk:
+    post:
+      tags: [Questions]
+      summary: Bulk create questions
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [questions]
+              properties:
+                questions: { type: array; items: { type: object } }
+      responses:
+        '201': { description: Created; returns created count and errors if any }
+
+  /attempts/start:
+    post:
+      tags: [Attempts]
+      summary: Start an exam (creates in_progress attempt; 403 if already submitted)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [examId]
+              properties:
+                examId: { type: string }
+      responses:
+        '200':
+          description: Existing in_progress attempt returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  attempt: { type: object }
+                  exam: { type: object; properties: { durationMinutes: { type: number }; title: { type: string } } }
+        '201': { description: New attempt created }
+        '403': { description: Exam not published or already completed (no retakes) }
+        '404': { description: Exam not found }
+
+  /attempts:
+    get:
+      tags: [Attempts]
+      summary: List attempts (student own; admin filtered by examId or userId)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: examId
+          in: query
+          schema: { type: string }
+        - name: userId
+          in: query
+          schema: { type: string }
+          description: Admin only; filter by user
+        - name: status
+          in: query
+          schema: { type: string; enum: [in_progress, submitted] }
+      responses:
+        '200':
+          description: List of attempts (with examTitle; admin gets user info)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  attempts: { type: array }
+
+  /attempts/export:
+    get:
+      tags: [Attempts]
+      summary: Export attempts as CSV or Excel (Admin/Super Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: examId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          schema: { type: string; enum: [csv, excel, xlsx]; default: csv }
+      responses:
+        '200':
+          description: File download (text/csv or xlsx)
+        '400': { description: examId required }
+
+  /attempts/{id}:
+    get:
+      tags: [Attempts]
+      summary: Get one attempt
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Attempt with answers }
+        '403': { description: Student can only view own }
+        '404': { description: Not found }
+    patch:
+      tags: [Attempts]
+      summary: Update attempt (PATCH for auto-save answers; use POST submit to submit)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers: { type: array; items: { type: object; properties: { questionId: { type: string }; value: {} } } }
+      responses:
+        '200': { description: Updated (in_progress only) }
+        '404': { description: Not found or already submitted }
+
+  /attempts/{id}/submit:
+    post:
+      tags: [Attempts]
+      summary: Submit attempt (grades and marks submitted)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers: { type: array; items: { type: object; properties: { questionId: { type: string }; value: {} } } }
+                securityEvents: { type: array; items: { type: object; properties: { type: { type: string }; at: { type: string } } } }
+      responses:
+        '200':
+          description: Submitted; returns attempt and result (score, maxScore, percentage, passed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  attempt: { type: object }
+                  result: { type: object; properties: { score: { type: number }; maxScore: { type: number }; percentage: { type: number }; passed: { type: boolean } } }
+        '404': { description: Not found or already submitted }
+
+  /attempts/{id}/grades:
+    patch:
+      tags: [Attempts]
+      summary: Save manual grades (Admin/Super Admin)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grades]
+              properties:
+                grades:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      questionId: { type: string }
+                      pointsAwarded: { type: number }
+      responses:
+        '200': { description: Grades saved }
+        '404': { description: Not found }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (Admin/Super Admin; optional role filter)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string; enum: [student, admin, super_admin] }
+      responses:
+        '200':
+          description: List of users (email, name, role, createdAt)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  users: { type: array }
+    post:
+      tags: [Users]
+      summary: Bulk create students
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [users]
+              properties:
+                users:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [email, name]
+                    properties:
+                      email: { type: string; format: email }
+                      name: { type: string }
+                      password: { type: string; minLength: 8 }
+      responses:
+        '201':
+          description: created, skipped, failed counts; skippedDetails, errors arrays if any
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  created: { type: number }
+                  skipped: { type: number }
+                  failed: { type: number }
+                  skippedDetails: { type: array }
+                  errors: { type: array }
