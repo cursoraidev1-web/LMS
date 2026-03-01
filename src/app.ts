@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
@@ -28,11 +28,11 @@ app.use(requestLogger);
 
 app.use(rateLimitMiddleware);
 
-app.get('/health', (_req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/health', (_req: Request, res: Response) => res.status(200).json({ status: 'ok' }));
 
 // OpenAPI spec (for Swagger UI and frontend). Inject PUBLIC_API_URL as server when set.
 const openapiPath = path.join(__dirname, '..', 'openapi.yaml');
-app.get(`${config.API_PREFIX}/openapi.yaml`, (_req, res) => {
+app.get(`${config.API_PREFIX}/openapi.yaml`, (_req: Request, res: Response) => {
   if (!fs.existsSync(openapiPath)) {
     res.status(404).json({ success: false, message: 'OpenAPI spec not found' });
     return;

@@ -1,18 +1,15 @@
 # Deploying to Render
 
-The TypeScript build requires **devDependencies** (e.g. `@types/node`, `@types/express`) to compile. Render often runs `npm install` with `NODE_ENV=production`, which skips devDependencies and causes the build to fail.
+Type definitions and TypeScript are in **dependencies**, so a standard production install (`npm install && npm run build`) works.
 
 ## Build command
 
-In your Render service **Build Command**, use either:
+Use the default:
 
-- **Recommended:** `npm run build:render`  
-  This runs `npm install --include=dev` then `npm run build`, so type definitions are installed and `tsc` succeeds.
+- **Build Command:** `npm install && npm run build`
+- **Start Command:** `npm start` (runs `node dist/server.js`)
 
-- Or set the build command to:  
-  `npm install --include=dev && npm run build`
-
-**Start Command:** `npm start` (runs `node dist/server.js`).
+Test files are excluded from the build, so you don't need Vitest/Supertest on Render.
 
 ## Environment
 
